@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RESQ-BOT COMMAND CENTER</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="header">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <h1>RESQ-BOT COMMAND CENTER</h1>
+            <!-- Navigation Tabs -->
+            <div class="nav-tabs">
+                <button class="nav-tab active" id="tab-btn-local" onclick="switchView('local')">
+                    🛰️ LOCAL MISSION (A* & YOLO)
+                </button>
+                <button class="nav-tab" id="tab-btn-firebase" onclick="switchView('firebase')">
+                    📍 FIREBASE LIVE GPS MAP
+                </button>
+            </div>
+        </div>
+        <div class="mode-indicator" id="mode-indicator">LIVE MODE</div>
+    </div>
+    
+    <!-- VIEW 1: EXISTING LOCAL MISSION & SIMULATOR (100% UNTOUCHED) -->
+    <div id="view-local" class="view-content">
+        <div class="container">
+            <!-- Main Map Area & Video Area -->
+            <div class="main-panel">
+                <div class="panel-header" style="display: flex; justify-content: space-between;">
+                    <span>RESQ-BOT CAM & MAP</span>
+                    <span id="battery-indicator" style="color: #22c55e;">BATTERY: 100%</span>
+                </div>
+                <div style="display: flex; flex: 1; gap: 15px; margin: 1px;">
+                    <!-- Live Video Feed -->
+                    <div style="flex: 1; border: 1px solid rgba(14, 165, 233, 0.5); background-color: #000; border-radius: 4px; overflow: hidden; position: relative;">
+                        <div style="position: absolute; top: 5px; left: 5px; color: #fff; background: rgba(0,0,0,0.6); padding: 2px 6px; font-size: 11px; z-index: 10;">YOLO VISION</div>
+                        <img src="/video_feed" alt="Video Feed Offline" style="width: 100%; height: 100%; object-fit: contain;">
+                    </div>
+                    <!-- Leaflet Map -->
+                    <div class="map-container" style="flex: 2;">
+                        <div id="map"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Sidebar -->
+            <div class="right-panel">
+                <!-- Telemetry -->
+                <div class="panel">
+                    <div class="panel-header">ROBOT TELEMETRY</div>
+                    <div class="status-grid">
+                        <div>Status: <span class="text-green" id="ws-status">CONNECTING...</span></div>
+                        <div>Battery: <span class="text-green" id="stat-battery">100%</span></div>
+                        <div>Distance: <span class="text-blue" id="stat-dist">0.0 m</span></div>
+                        <div>Replans: <span class="text-yellow" id="stat-replans">0</span></div>
+                        <div>A* Plan Time: <span class="text-blue" id="stat-plan-time">0 ms</span></div>
+                        <div>Mission Time: <span id="stat-time">0s</span></div>
+                    </div>
+                </div>
+
+                <!-- Simulation Controls -->
+                <div class="panel">
+                    <div class="panel-header">WHAT-IF SIMULATOR</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <button class="sim-btn btn-red" onclick="sendCommand('BLOCK_PATH')">⚠ BLOCK CURRENT PATH</button>
+                        <button class="sim-btn btn-yellow" onclick="sendCommand('SPAWN_OBSTACLE')">☄ SPAWN STATIC DEBRIS</button>
+                        <button class="sim-btn btn-yellow" onclick="sendCommand('SPAWN_MOVING_HAZARD')">🏃 SPAWN MOVING HAZARD</button>
+                    </div>
+                </div>
+                
+                <!-- Survivors -->
+                <div class="panel flex-grow">
+                    <div class="panel-header">SURVIVORS DETECTED</div>
+                    <div class="survivors-list" id="survivors-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bottom Event Log -->
+        <div class="event-log">
+            <div class="panel-header">MISSION EVENT LOG</div>
+            <div class="log-content" id="log-content">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW 2: FIREBASE REALTIME DATABASE LIVE COORDINATES -->
+    <div id="view-firebase" class="view-content" style="display: none;">
+        <div class="container">
+            <!-- Firebase Satellite Map Area -->
+            <div class="main-panel">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span>📍 FIREBASE REAL-TIME GPS COORDINATES</span>
+                        <span id="fb-live-pill" class="text-green" style="font-size: 13px;">● AUTO-SYNC ACTIVE</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="sim-btn" style="padding: 4px 12px; font-size: 12px; border-left: 3px solid var(--accent);" onclick="fetchFirebaseCoordinates(true)">🔄 REFRESH NOW</button>
+                        <button class="sim-btn" style="padding: 4px 12px; font-size: 12px; border-left: 3px solid #ef4444;" onclick="centerOnLatestFirebase()">🎯 CENTER LATEST</button>
+                    </div>
+                </div>
+                <div class="map-container">
+                    <div id="firebase-map" style="width: 100%; height: 100%; background-color: #050b14;"></div>
+                </div>
+            </div>
+            
+            <!-- Firebase Right Sidebar -->
+            <div class="right-panel">
+                <!-- Latest Detection Telemetry -->
+                <div class="panel">
+                    <div class="panel-header" style="color: #38bdf8;">LATEST DETECTED SURVIVOR</div>
+                    <div class="status-grid" id="fb-latest-card">
+                        <div>Target: <span class="text-green" id="fb-obj">HUMAN</span></div>
+                        <div>Confidence: <span class="text-yellow" id="fb-conf">--</span></div>
+                        <div>Latitude: <span class="text-blue" id="fb-lat">--</span></div>
+                        <div>Longitude: <span class="text-blue" id="fb-lon">--</span></div>
+                        <div>Detection Time: <span id="fb-time" style="color: #e0f2fe; font-size: 13px;">--</span></div>
+                        <div style="font-size: 12px; line-height: 1.4; border-top: 1px solid rgba(14, 165, 233, 0.3); padding-top: 6px;">
+                            Campus / Area: <br>
+                            <span id="fb-loc-name" style="color: #94a3b8; font-size: 11px;">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database Records List -->
+                <div class="panel flex-grow">
+                    <div class="panel-header" style="display: flex; justify-content: space-between;">
+                        <span>SURVIVOR LOGS</span>
+                        <span id="fb-total-count" class="text-blue" style="font-size: 12px;">0 RECORDS</span>
+                    </div>
+                    <div class="survivors-list" id="fb-detections-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Firebase Telemetry Log -->
+        <div class="event-log" style="height: 140px;">
+            <div class="panel-header">FIREBASE REALTIME SYNC LOG</div>
+            <div class="log-content" id="fb-log-content">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
